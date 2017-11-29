@@ -77,6 +77,7 @@
 */
 #define MAXBUFF     512
 #define ERROR_VALUE 9999.0
+#define MAXDIST     361
 
 /************************************************************************/
 /* Globals
@@ -88,10 +89,10 @@
 int main(int argc, char **argv);
 void Usage(void);
 BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                  BOOL *Radians); 
+                  BOOL *Radians, BOOL *doDistrib); 
 REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians);
-void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, 
-                                    BOOL Radians);
+void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, 
+                                 BOOL Radians, BOOL doDistrib);
 
 /************************************************************************/
 /*>int main(int argc, char **argv)
@@ -110,15 +111,16 @@ int main(int argc, char **argv)
            outFile[MAXBUFF];
    int     natoms;
    PDB     *pdb;
-   BOOL    Radians    = FALSE;
+   BOOL    Radians    = FALSE,
+           doDistrib  = FALSE;
 
-   if(ParseCmdLine(argc, argv, inFile, outFile, &Radians))
+   if(ParseCmdLine(argc, argv, inFile, outFile, &Radians, &doDistrib))
    {
       if(blOpenStdFiles(inFile, outFile, &in, &out))
       {
          if((pdb=blReadPDB(in, &natoms))!=NULL)
          {
-            CalculateAndDisplayTorsionsNew(out, pdb, Radians);
+            CalculateAndDisplayTorsions(out, pdb, Radians, doDistrib);
          }
          else
          {
@@ -144,15 +146,28 @@ input or output file\n");
 
 
 /************************************************************************/
-void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
+void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, BOOL Radians,
+                                 BOOL doDistrib)
 {
    PDB *res     = NULL,
        *nextRes = NULL;
+   int phiDist[MAXDIST], psiDist[MAXDIST], omegaDist[MAXDIST], i;
+
+   for(i=0; i<MAXDIST; i++)
+      phiDist[i] = psiDist[i] = omegaDist[i] = 0;
    
    res = fullpdb;
 
-   printf("#        PHI          PSI        OMEGA\n");
-   printf("#O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+   if(doDistrib)
+   {
+      printf("#        PHI Count    PSI Count  OMEGA Count\n");
+      printf("#Angle O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+   }
+   else
+   {
+      printf("#        PHI          PSI        OMEGA\n");
+      printf("#O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+   }
    
    while(res!=NULL)
    {
@@ -226,11 +241,29 @@ void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
                              psiAtoms[2],   psiAtoms[3], Radians);
          omega = CalcTorsion(omegaAtoms[0], omegaAtoms[1],
                              omegaAtoms[2], omegaAtoms[3], Radians);
-         printf(" %11.2f  %11.2f  %11.2f\n", phi, psi, omega);
+         if(doDistrib)
+         {
+            phiDist[180+(int)(phi+0.5)]++;
+            psiDist[180+(int)(psi+0.5)]++;
+            omegaDist[180+(int)(omega+0.5)]++;
+         }
+         else
+         {
+            printf(" %11.2f  %11.2f  %11.2f\n", phi, psi, omega);
+         }
       }
       
       /* Step to next residue                                           */
       res=nextRes;
+   }
+
+   if(doDistrib)
+   {
+      for(i=0; i<MAXDIST; i++)
+      {
+         printf("%6d %11d %11d %11d\n", i-180, phiDist[i], 
+                psiDist[i], omegaDist[i]);
+      }
    }
 }
 
@@ -274,7 +307,7 @@ REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians)
 
 /************************************************************************/
 /*>BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                     BOOL *Radians)
+                     BOOL *Radians, BOOL *doDistrib)
    ---------------------------------------------------------------------
 *//**
 
@@ -283,14 +316,16 @@ REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians)
    \param[out]    *infile      Input file (or blank string)
    \param[out]    *outfile     Output file (or blank string)
    \param[out]    *Radians     Output radians rather than degrees
+   \param[out]    *doDistrib   Show the distribution instead of angles
    \return                     Success?
 
    Parse the command line
    
 -  28.11.17 V1.0
+-  29.11.17 Added -d/doDistrib
 */
 BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                  BOOL *Radians)
+                  BOOL *Radians, BOOL *doDistrib)
 {
    argc--;
    argv++;
@@ -305,6 +340,9 @@ BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile,
          {
          case 'r':
             *Radians = TRUE;
+            break;
+         case 'd':
+            *doDistrib = TRUE;
             break;
          default:
             return(FALSE);
