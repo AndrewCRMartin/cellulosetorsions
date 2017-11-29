@@ -89,10 +89,15 @@
 int main(int argc, char **argv);
 void Usage(void);
 BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                  BOOL *Radians, BOOL *doDistrib); 
+                  BOOL *Radians, BOOL *doDistrib, BOOL *doOther,
+                  char *atom1, char *atom2, char *atom3, char *atom4); 
 REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians);
 void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, 
                                  BOOL Radians, BOOL doDistrib);
+void CalculateAndDisplayOtherTorsion(FILE *out, PDB *pdb, BOOL Radians, 
+                                     BOOL doDistrib, char *atom1, 
+                                     char *atom2,char *atom3, 
+                                     char *atom4);
 
 /************************************************************************/
 /*>int main(int argc, char **argv)
@@ -114,13 +119,26 @@ int main(int argc, char **argv)
    BOOL    Radians    = FALSE,
            doDistrib  = FALSE;
 
-   if(ParseCmdLine(argc, argv, inFile, outFile, &Radians, &doDistrib))
+   BOOL doOther = FALSE;
+   
+   char atom1[8], atom2[8], atom3[8], atom4[8]; 
+
+   if(ParseCmdLine(argc, argv, inFile, outFile, &Radians, &doDistrib,
+                   &doOther, atom1, atom2, atom3, atom4))
    {
       if(blOpenStdFiles(inFile, outFile, &in, &out))
       {
          if((pdb=blReadPDB(in, &natoms))!=NULL)
          {
-            CalculateAndDisplayTorsions(out, pdb, Radians, doDistrib);
+            if(doOther)
+            {
+               CalculateAndDisplayOtherTorsion(out, pdb, Radians, doDistrib,
+                                               atom1, atom2, atom3, atom4);
+            }
+            else
+            {
+               CalculateAndDisplayTorsions(out, pdb, Radians, doDistrib);
+            }
          }
          else
          {
@@ -160,13 +178,13 @@ void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, BOOL Radians,
 
    if(doDistrib)
    {
-      printf("#        PHI Count    PSI Count  OMEGA Count\n");
-      printf("#Angle O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+      fprintf(out, "#        PHI Count    PSI Count  OMEGA Count\n");
+      fprintf(out, "#Angle O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
    }
    else
    {
-      printf("#        PHI          PSI        OMEGA\n");
-      printf("#O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+      fprintf(out, "#        PHI          PSI        OMEGA\n");
+      fprintf(out, "#O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
    }
    
    while(res!=NULL)
@@ -182,7 +200,7 @@ void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, BOOL Radians,
 
       /* Blank the arrays                                               */
       for(i=0; i<4; i++)
-         phiAtoms[i] = psiAtoms[i] = NULL;
+         phiAtoms[i] = psiAtoms[i] = omegaAtoms[i] = NULL;
       
       /* Find the atoms for phi and psi in this residue                 */
       for(p=res; p!=nextRes; NEXT(p))
@@ -249,7 +267,7 @@ void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, BOOL Radians,
          }
          else
          {
-            printf(" %11.2f  %11.2f  %11.2f\n", phi, psi, omega);
+            fprintf(out, " %11.2f  %11.2f  %11.2f\n", phi, psi, omega);
          }
       }
       
@@ -261,8 +279,8 @@ void CalculateAndDisplayTorsions(FILE *out, PDB *fullpdb, BOOL Radians,
    {
       for(i=0; i<MAXDIST; i++)
       {
-         printf("%6d %11d %11d %11d\n", i-180, phiDist[i], 
-                psiDist[i], omegaDist[i]);
+         fprintf(out, "%6d %11d %11d %11d\n", i-180, phiDist[i], 
+                 psiDist[i], omegaDist[i]);
       }
    }
 }
@@ -304,10 +322,113 @@ REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians)
    return(tor);
 }
 
+/************************************************************************/
+void CalculateAndDisplayOtherTorsion(FILE *out, PDB *fullpdb, 
+                                     BOOL Radians, BOOL doDistrib,
+                                     char *atom1, char *atom2,
+                                     char *atom3, char *atom4)
+{
+   PDB *res     = NULL,
+       *nextRes = NULL;
+   int angleDist[MAXDIST], i;
+
+   for(i=0; i<MAXDIST; i++)
+      angleDist[i] = 0;
+   
+   res = fullpdb;
+
+   if(doDistrib)
+   {
+      fprintf(out, "#      Count\n");
+      fprintf(out, "#Angle %s-%s-%s-%s\n", atom1, atom2, atom3, atom4);
+   }
+   else
+   {
+      fprintf(out, "#      Angle\n");
+      fprintf(out, "#%s-%s-%s-%s\n", atom1, atom2, atom3, atom4);
+   }
+
+   PADMINTERM(atom1, 4);
+   PADMINTERM(atom2, 4);
+   PADMINTERM(atom3, 4);
+   PADMINTERM(atom4, 4);
+   
+   while(res!=NULL)
+   {
+      BOOL OK;
+      int  i;
+      PDB *p, 
+          *atoms[4];
+
+      nextRes = blFindNextResidue(res);
+
+      /* Blank the arrays                                               */
+      for(i=0; i<4; i++)
+         atoms[i] = NULL;
+      
+      /* Find the atoms for phi and psi in this residue                 */
+      for(p=res; p!=nextRes; NEXT(p))
+      {
+         if(!strncmp(p->atnam, atom1, 4))
+            atoms[0] = p;
+         else if(!strncmp(p->atnam, atom2, 4))
+            atoms[1] = p;
+         else if(!strncmp(p->atnam, atom3, 4))
+            atoms[2] = p;
+         else if(!strncmp(p->atnam, atom4, 4))
+            atoms[3] = p;
+      }
+      
+      OK = TRUE;
+      for(i=0; i<4; i++)
+      {
+         if(atoms[i] == NULL)
+         {
+            OK = FALSE;
+            break;
+         }
+      }
+      
+      if(!OK)
+      {
+         fprintf(stderr, "Atom missing in residue %s.%d%s\n",
+                 res->chain, res->resnum, res->insert);
+      }
+      else
+      {
+         REAL angle;
+         angle = CalcTorsion(atoms[0],   atoms[1],
+                             atoms[2],   atoms[3], Radians);
+         if(doDistrib)
+         {
+            angleDist[180+(int)(angle+0.5)]++;
+         }
+         else
+         {
+            fprintf(out, " %11.2f\n", angle);
+         }
+      }
+      
+      /* Step to next residue                                           */
+      res=nextRes;
+   }
+
+   if(doDistrib)
+   {
+      for(i=0; i<MAXDIST; i++)
+      {
+         fprintf(out, "%6d %11d\n", i-180, angleDist[i]);
+      }
+   }
+   
+}
+
+
 
 /************************************************************************/
 /*>BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                     BOOL *Radians, BOOL *doDistrib)
+                     BOOL *Radians, BOOL *doDistrib, BOOL *doOther,
+                     char *atom1, char *atom2, char *atom3, char *atom4)
    ---------------------------------------------------------------------
 *//**
 
@@ -317,15 +438,22 @@ REAL CalcTorsion(PDB *p1, PDB *p2, PDB *p3, PDB *p4, BOOL Radians)
    \param[out]    *outfile     Output file (or blank string)
    \param[out]    *Radians     Output radians rather than degrees
    \param[out]    *doDistrib   Show the distribution instead of angles
+   \param[out]    *doOther     Do a specified set of atoms
+   \param[out]    *atom1       Atom1
+   \param[out]    *atom2       Atom2
+   \param[out]    *atom3       Atom3
+   \param[out]    *atom4       Atom4
+
    \return                     Success?
 
    Parse the command line
    
 -  28.11.17 V1.0
--  29.11.17 Added -d/doDistrib
+-  29.11.17 Added -d/doDistrib, -a/doOther/atom1/atom2/atom3/atom4
 */
 BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile, 
-                  BOOL *Radians, BOOL *doDistrib)
+                  BOOL *Radians, BOOL *doDistrib, BOOL *doOther,
+                  char *atom1, char *atom2, char *atom3, char *atom4)
 {
    argc--;
    argv++;
@@ -343,6 +471,19 @@ BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile,
             break;
          case 'd':
             *doDistrib = TRUE;
+            break;
+         case 'a':
+            *doOther = TRUE;
+            argc--; argv++;
+            if(argc < 4)
+               return(FALSE);
+            strncpy(atom1, argv[0], 8);
+            argc--; argv++;
+            strncpy(atom2, argv[0], 8);
+            argc--; argv++;
+            strncpy(atom3, argv[0], 8);
+            argc--; argv++;
+            strncpy(atom4, argv[0], 8);
             break;
          default:
             return(FALSE);
@@ -387,22 +528,28 @@ BOOL ParseCmdLine(int argc, char **argv, char *infile, char *outfile,
    Displays a usage message
 
 -  28.11.17 Original   By: ACRM
+-  29.11.17 V1.1 Added -d and -a
 */
 void Usage(void)
 {
-   fprintf(stderr,"\ncellulosetorsions V1.0 (c) 2017 Andrew Martin, \
+   fprintf(stderr,"\ncellulosetorsions V1.1 (c) 2017 Andrew Martin, \
 UCL.\n");
-   fprintf(stderr,"\nUsage: cellulosetorsions [-h][-r] \
-[in.pdb [out.tor]]\n");
+   fprintf(stderr,"\nUsage: cellulosetorsions [-h][-r][-d][-a atom1 \
+atom2 atom3 atom4]\n");
+   fprintf(stderr,"                         [in.pdb [out.tor]]\n");
    fprintf(stderr,"       -h   This help message\n");
    fprintf(stderr,"       -r   Give results in radians\n");
+   fprintf(stderr,"       -d   Show the distribution in 1 degree bins\n");
+   fprintf(stderr,"       -a   Instead of Phi,Psi,Omega use the \
+specified atoms\n");
 
-   fprintf(stderr,"\nGenerates a set of phi (O5-C1-O4-C4) and psi \
-(C1-O4-C4-C5) torsion angles\n");
-   fprintf(stderr,"from a PDB file containing conformations of \
-cellulose.\n");
+   fprintf(stderr,"\nGenerates a set of phi (O5-C1-O4-C4), psi \
+(C1-O4-C4-C5) and omega\n");
+   fprintf(stderr,"(O5-C5-C6-O6) torsion angles from a PDB file \
+containing conformations\n");
+   fprintf(stderr,"of cellulose.\n");
 
-   fprintf(stderr,"\nI/O is through stdin/stdout if unspecified.\n");
+   fprintf(stderr,"\nI/O is through stdin/stdout if unspecified.\n\n");
 }
 
 
