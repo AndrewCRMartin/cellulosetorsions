@@ -3,8 +3,8 @@
 
    \file       cellulosetorsions.c
    
-   \version    V1.0
-   \date       28.11.17
+   \version    V1.1
+   \date       29.11.17
    \brief      Calculate torsion angles for a PDB file of cellulose 
                conformations
    
@@ -54,6 +54,8 @@
    =================
 
 -  V1.0  28.11.17 Original
+-  V1.1  29.11.17 Does omega as well and creates distribution. Also allows
+                  a set of atoms to be specified
 
 *************************************************************************/
 /* Includes
@@ -68,6 +70,7 @@
 #include "bioplib/general.h"
 #include "bioplib/pdb.h"
 #include "bioplib/macros.h"
+#include "bioplib/angle.h"
 
 /************************************************************************/
 /* Defines and macros
@@ -139,6 +142,7 @@ input or output file\n");
    return(0);
 }
 
+
 /************************************************************************/
 void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
 {
@@ -146,13 +150,18 @@ void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
        *nextRes = NULL;
    
    res = fullpdb;
+
+   printf("#        PHI          PSI        OMEGA\n");
+   printf("#O5-C1-O4-C4  C1-O4-C4-C5  O5-C5-C6-O6\n");
+   
    while(res!=NULL)
    {
       BOOL OK;
       int  i;
       PDB *p, 
           *phiAtoms[4],
-          *psiAtoms[4];
+          *psiAtoms[4],
+          *omegaAtoms[4];
 
       nextRes = blFindNextResidue(res);
 
@@ -180,12 +189,23 @@ void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
             psiAtoms[2] = p;
          else if(!strncmp(p->atnam, "C5  ", 4))
             psiAtoms[3] = p;
+
+         if(!strncmp(p->atnam, "O5  ", 4))
+            omegaAtoms[0] = p;
+         else if(!strncmp(p->atnam, "C5  ", 4))
+            omegaAtoms[1] = p;
+         else if(!strncmp(p->atnam, "C6  ", 4))
+            omegaAtoms[2] = p;
+         else if(!strncmp(p->atnam, "O6  ", 4))
+            omegaAtoms[3] = p;
       }
       
       OK = TRUE;
       for(i=0; i<4; i++)
       {
-         if((phiAtoms[i] == NULL) || (psiAtoms[i] == NULL))
+         if((phiAtoms[i]   == NULL) || 
+            (psiAtoms[i]   == NULL) || 
+            (omegaAtoms[i] == NULL))
          {
             OK = FALSE;
             break;
@@ -199,12 +219,14 @@ void CalculateAndDisplayTorsionsNew(FILE *out, PDB *fullpdb, BOOL Radians)
       }
       else
       {
-         REAL phi, psi;
-         phi = CalcTorsion(phiAtoms[0], phiAtoms[1],
-                           phiAtoms[2], phiAtoms[3], Radians);
-         psi = CalcTorsion(psiAtoms[0], psiAtoms[1],
-                           psiAtoms[2], psiAtoms[3], Radians);
-         printf("%.2f %.2f\n", phi, psi);
+         REAL phi, psi, omega;
+         phi   = CalcTorsion(phiAtoms[0],   phiAtoms[1],
+                             phiAtoms[2],   phiAtoms[3], Radians);
+         psi   = CalcTorsion(psiAtoms[0],   psiAtoms[1],
+                             psiAtoms[2],   psiAtoms[3], Radians);
+         omega = CalcTorsion(omegaAtoms[0], omegaAtoms[1],
+                             omegaAtoms[2], omegaAtoms[3], Radians);
+         printf(" %11.2f  %11.2f  %11.2f\n", phi, psi, omega);
       }
       
       /* Step to next residue                                           */

@@ -1,5 +1,5 @@
-CC=cc
-COPTS=-L$(HOME)/lib -I$(HOME)/include -O3
+CC=/usr/bin/cc
+COPTS=-ansi -pedantic -Wall -L$(HOME)/lib -I$(HOME)/include -g
 OFILES=cellulosetorsions.o
 EXE=cellulosetorsions
 
